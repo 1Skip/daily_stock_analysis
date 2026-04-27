@@ -159,7 +159,17 @@ def init_llm_client():
                 self.model = self._select_model()
 
             def _select_model(self):
-                if os.getenv("GEMINI_API_KEY"):
+                # 国内大模型优先
+                if os.getenv("CUSTOM_MODEL"):
+                    return os.getenv("CUSTOM_MODEL")
+                elif os.getenv("DEEPSEEK_API_KEY"):
+                    return "deepseek/deepseek-chat"
+                elif os.getenv("DASHSCOPE_API_KEY"):
+                    return "openai/qwen-turbo"
+                elif os.getenv("ZHIPU_API_KEY"):
+                    return "openai/glm-4-flash"
+                # 国外大模型
+                elif os.getenv("GEMINI_API_KEY"):
                     return "gemini/gemini-1.5-flash"
                 elif os.getenv("OPENAI_API_KEY"):
                     return "gpt-4o-mini"
