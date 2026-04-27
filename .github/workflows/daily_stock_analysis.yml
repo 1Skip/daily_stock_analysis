@@ -15,8 +15,9 @@ on:
         default: 'analysis'
         type: choice
         options:
-          - analysis      # 股票分析
-          - recommend     # 股票推荐
+          - analysis          # 股票分析
+          - recommend         # 股票推荐
+          - sector_recommend  # 板块概念推荐
       mode:
         description: '分析模式 (仅分析任务有效)'
         required: true
@@ -425,5 +426,68 @@ jobs:
         uses: actions/upload-artifact@v6
         with:
           name: recommendations-${{ github.run_id }}
+          path: recommendations/
+          retention-days: 30
+
+  # 任务 3: 板块概念推荐 (每天开盘前)
+  sector_recommend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    if: |
+      github.event.schedule == '0 1 * * 1-5' ||
+      github.event.inputs.job_type == 'sector_recommend' ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.job_type == 'sector_recommend')
+
+    steps:
+      - name: 随机延迟
+        run: sleep $((RANDOM % 30))
+
+      - name: 检出代码
+        uses: actions/checkout@v5
+
+      - name: 设置 Python 环境
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: 安装依赖
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: 创建输出目录
+        run: mkdir -p recommendations logs
+
+      - name: 执行板块概念推荐
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          AIHUBMIX_KEY: ${{ secrets.AIHUBMIX_KEY }}
+          FEISHU_WEBHOOK_URL: ${{ secrets.FEISHU_WEBHOOK_URL }}
+          WECHAT_WEBHOOK_URL: ${{ secrets.WECHAT_WEBHOOK_URL }}
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          PUSHPLUS_TOKEN: ${{ secrets.PUSHPLUS_TOKEN }}
+        run: |
+          echo "=========================================="
+          echo "📊 板块概念股票推荐"
+          echo "=========================================="
+          echo "⏰ 时间: $(TZ='Asia/Shanghai' date '+%Y-%m-%d %H:%M:%S')"
+          echo "🎯 分析板块: 苹果概念、特斯拉概念、电力、算力租赁"
+          echo ""
+
+          python sector_recommend.py \
+            --sector all \
+            --top 5 \
+            --save \
+            --notify
+
+      - name: 上传推荐结果
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: sector-recommendations-${{ github.run_id }}
           path: recommendations/
           retention-days: 30
