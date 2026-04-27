@@ -82,32 +82,116 @@ class TechnicalScanner:
         symbols: List[str],
         strategy: str = "breakout"
     ) -> List[ScanResult]:
-        """扫描自选股票池
-
-        Args:
-            symbols: 股票代码列表
-            strategy: 筛选策略
-
-        Returns:
-            List[ScanResult]: 扫描结果列表
-        """
+        """扫描自选股票池 - 使用实时行情批量获取"""
         self.logger.info(f"开始扫描 {len(symbols)} 只自选股票")
 
-        results = []
-        for symbol in symbols:
-            try:
-                result = await self._analyze_symbol(symbol, strategy)
-                if result and result.score >= 50:
-                    results.append(result)
-                    self.logger.info(f"✓ {symbol} 评分:{result.score:.0f}")
-                elif result:
-                    self.logger.info(f"✗ {symbol} 评分:{result.score:.0f} (低于50)")
-            except Exception as e:
-                self.logger.warning(f"分析 {symbol} 失败: {e}")
-                continue
+        try:
+            results = await self._scan_with_realtime_data(symbols)
+        except Exception as e:
+            self.logger.warning(f"实时数据扫描失败: {e}，回退到K线扫描")
+            results = []
+            for symbol in symbols:
+                try:
+                    result = await self._analyze_symbol(symbol, strategy)
+                    if result and result.score >= 50:
+                        results.append(result)
+                except Exception:
+                    continue
 
         self.logger.info(f"扫描完成: {len(results)}/{len(symbols)} 通过")
         results.sort(key=lambda x: x.score, reverse=True)
+        return results
+
+    async def _scan_with_realtime_data(self, symbols: List[str]) -> List[ScanResult]:
+        """使用批量实时行情数据扫描（更可靠）"""
+        import akshare as ak
+
+        symbol_set = set(symbols)
+        results = []
+
+        try:
+            self.logger.info("获取A股实时行情...")
+            df = ak.stock_zh_a_spot_em()
+            self.logger.info(f"获取到 {len(df)} 只股票实时数据")
+
+            # 过滤只保留目标股票
+            df = df[df['代码'].isin(symbol_set)]
+            self.logger.info(f"匹配到 {len(df)} 只目标股票")
+
+            for _, row in df.iterrows():
+                try:
+                    code = row['代码']
+                    name = row['名称']
+                    price = float(row['最新价'])
+                    change_pct = float(row['涨跌幅'])
+                    volume_ratio = float(row.get('量比', 1))
+                    turnover = float(row.get('换手率', 0))
+                    volume = float(row.get('成交量', 0))
+                    amount = float(row.get('成交额', 0))
+
+                    if pd.isna(price) or price <= 0:
+                        continue
+
+                    # 过滤ST/退市
+                    if 'ST' in str(name) or '退' in str(name):
+                        continue
+
+                    # 基于实时数据评分
+                    score = 60  # 基础分
+                    signals = {}
+                    reasons = []
+
+                    # 涨幅适中（不跌且不太大）
+                    if 0.5 < change_pct < 5:
+                        score += 10
+                        reasons.append(f"温和上涨{change_pct:+.2f}%")
+                    elif 1 < change_pct:
+                        score += 5
+                        reasons.append(f"上涨{change_pct:+.2f}%")
+                    elif change_pct < -5:
+                        score -= 10
+                        reasons.append(f"跌幅较大{change_pct:.2f}%")
+
+                    # 量比（>1表示放量）
+                    if volume_ratio > 1.5:
+                        score += 10
+                        signals['volume_surge'] = True
+                        reasons.append(f"量比{volume_ratio:.1f}倍")
+                    elif volume_ratio > 1.0:
+                        score += 5
+
+                    # 换手率适中
+                    if 2 < turnover < 15:
+                        score += 10
+                        reasons.append(f"换手率{turnover:.1f}%")
+                    elif turnover > 15:
+                        score -= 5  # 换手率过高可能有风险
+
+                    # 代码加名称用于识别
+                    reason_str = '; '.join(reasons) if reasons else f"当前价¥{price:.2f}"
+
+                    result = ScanResult(
+                        symbol=code,
+                        name=name,
+                        price=price,
+                        score=score,
+                        signals=signals,
+                        reason=reason_str
+                    )
+
+                    if score >= 50:
+                        results.append(result)
+                        self.logger.info(f"✓ {code} {name} 评分:{score:.0f} ¥{price:.2f}")
+                    else:
+                        self.logger.info(f"✗ {code} {name} 评分:{score:.0f}")
+
+                except Exception as e:
+                    self.logger.warning(f"处理 {row.get('代码', '?')} 失败: {e}")
+                    continue
+
+        except Exception as e:
+            self.logger.error(f"获取实时行情失败: {e}")
+
         return results
 
     async def _get_a_share_symbols(self) -> List[str]:
