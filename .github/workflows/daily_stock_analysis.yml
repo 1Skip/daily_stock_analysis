@@ -56,11 +56,10 @@ jobs:
   analyze:
     runs-on: ubuntu-latest
     timeout-minutes: ${{ fromJSON(vars.ANALYSIS_TIMEOUT_MINUTES || '30') }}
-    # 根据定时触发或手动输入判断
+    # 定时触发(收盘后)或手动触发分析
     if: |
-      github.event.schedule == '0 8 * * 1-5' ||
-      github.event.inputs.job_type == 'analysis' ||
-      (github.event_name == 'workflow_dispatch' && github.event.inputs.job_type == 'analysis')
+      (github.event_name == 'schedule' && github.event.schedule == '0 8 * * 1-5') ||
+      github.event.inputs.job_type == 'analysis'
 
     steps:
       - name: 随机延迟
@@ -321,10 +320,11 @@ jobs:
   sector_recommend:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    # 定时触发(开盘前)或手动触发推荐
+    # 定时触发(开盘前)或手动触发推荐
     if: |
-      github.event.schedule == '0 13 * * 1-5' ||
-      github.event.inputs.job_type == 'sector_recommend' ||
-      (github.event_name == 'workflow_dispatch' && github.event.inputs.job_type == 'sector_recommend')
+      (github.event_name == 'schedule' && github.event.schedule == '0 13 * * 1-5') ||
+      github.event.inputs.job_type == 'sector_recommend'
 
     steps:
       - name: 随机延迟
