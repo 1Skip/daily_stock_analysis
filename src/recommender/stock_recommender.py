@@ -9,7 +9,11 @@ from datetime import datetime
 from enum import Enum
 
 import sys
-sys.path.append('src')
+from pathlib import Path
+# 将 src 目录加入 Python 路径，确保 scanner 模块可导入
+_src_dir = Path(__file__).resolve().parent.parent
+if str(_src_dir) not in sys.path:
+    sys.path.insert(0, str(_src_dir))
 from scanner.technical_scanner import TechnicalScanner, ScanResult
 from scanner.market_scanner import MarketScanner, HotStock
 
