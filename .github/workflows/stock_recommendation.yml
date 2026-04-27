@@ -1,0 +1,134 @@
+name: 股票推荐
+
+on:
+  # 定时触发 - 每天北京时间 9:00 (UTC 01:00) 开盘前推荐
+  schedule:
+    - cron: '0 1 * * 1-5'     # 周一到周五，UTC 01:00 = 北京时间 9:00
+
+  # 手动触发
+  workflow_dispatch:
+    inputs:
+      recommendation_type:
+        description: '推荐类型'
+        required: true
+        default: 'comprehensive'
+        type: choice
+        options:
+          - comprehensive  # 综合推荐
+          - breakout       # 突破推荐
+          - trend          # 趋势推荐
+          - oversold       # 超跌反弹
+          - hot            # 热点板块
+      top_n:
+        description: '推荐数量'
+        required: true
+        default: '5'
+        type: choice
+        options:
+          - '3'
+          - '5'
+          - '10'
+      scan_limit:
+        description: '扫描数量'
+        required: true
+        default: '50'
+        type: choice
+        options:
+          - '30'
+          - '50'
+          - '100'
+      notify:
+        description: '发送通知'
+        required: false
+        default: true
+        type: boolean
+
+# 并发控制
+concurrency:
+  group: stock-recommendation
+  cancel-in-progress: false
+
+jobs:
+  recommend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: 随机延迟
+        run: sleep $((RANDOM % 30))
+
+      - name: 检出代码
+        uses: actions/checkout@v5
+
+      - name: 设置 Python 环境
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: 安装依赖
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: 创建输出目录
+        run: mkdir -p recommendations
+
+      - name: 执行股票推荐
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          # 通知渠道配置
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          FEISHU_WEBHOOK_URL: ${{ secrets.FEISHU_WEBHOOK_URL }}
+          WECHAT_CORP_ID: ${{ secrets.WECHAT_CORP_ID }}
+          WECHAT_CORP_SECRET: ${{ secrets.WECHAT_CORP_SECRET }}
+          WECHAT_AGENT_ID: ${{ secrets.WECHAT_AGENT_ID }}
+          DINGTALK_WEBHOOK: ${{ secrets.DINGTALK_WEBHOOK }}
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          EMAIL_SMTP_SERVER: ${{ secrets.EMAIL_SMTP_SERVER }}
+          EMAIL_SMTP_PORT: ${{ secrets.EMAIL_SMTP_PORT }}
+          EMAIL_USER: ${{ secrets.EMAIL_USER }}
+          EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
+          EMAIL_TO: ${{ secrets.EMAIL_TO }}
+          PUSHPLUS_TOKEN: ${{ secrets.PUSHPLUS_TOKEN }}
+        run: |
+          TYPE="${{ github.event.inputs.recommendation_type || 'comprehensive' }}"
+          TOP_N="${{ github.event.inputs.top_n || '5' }}"
+          SCAN="${{ github.event.inputs.scan_limit || '50' }}"
+
+          echo "推荐类型: $TYPE"
+          echo "推荐数量: $TOP_N"
+          echo "扫描数量: $SCAN"
+
+          python recommend.py \
+            --type $TYPE \
+            --top $TOP_N \
+            --scan $SCAN \
+            --save \
+            --output "recommendations/rec_$(date +%Y%m%d)" \
+            --llm
+
+      - name: 上传推荐结果
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: recommendations-${{ github.run_id }}
+          path: recommendations/
+          retention-days: 30
+
+      - name: 发送通知（手动触发时）
+        if: github.event.inputs.notify == 'true'
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          FEISHU_WEBHOOK_URL: ${{ secrets.FEISHU_WEBHOOK_URL }}
+        run: |
+          python recommend.py \
+            --type ${{ github.event.inputs.recommendation_type || 'comprehensive' }} \
+            --top ${{ github.event.inputs.top_n || '5' }} \
+            --scan ${{ github.event.inputs.scan_limit || '50' }} \
+            --notify
