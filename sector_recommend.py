@@ -32,7 +32,7 @@ setup_env()
 
 from src.recommender.stock_recommender import StockRecommender, RecommendationType
 from src.logging_config import setup_logging
-from src.notification import send_notifications
+from src.notification import NotificationService
 
 logger = logging.getLogger(__name__)
 
@@ -331,9 +331,16 @@ async def send_sector_notification(all_recommendations: Dict, report: str):
 
         summary = "\n".join(summary_lines)
 
-        # 调用通知系统
-        await send_notifications(summary, "sector_recommendation")
-        logger.info("通知已发送")
+        # 使用 NotificationService 发送
+        service = NotificationService()
+        if service.is_available():
+            success = service.send(summary)
+            if success:
+                logger.info("通知已发送")
+            else:
+                logger.warning("通知发送失败")
+        else:
+            logger.warning("未配置通知渠道，无法发送通知")
 
     except Exception as e:
         logger.error(f"发送通知失败: {e}")
