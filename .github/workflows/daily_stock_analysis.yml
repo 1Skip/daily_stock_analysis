@@ -16,7 +16,6 @@ on:
         type: choice
         options:
           - analysis          # 股票分析
-          - recommend         # 股票推荐
           - sector_recommend  # 板块概念推荐
       mode:
         description: '分析模式 (仅分析任务有效)'
@@ -27,19 +26,8 @@ on:
           - full          # 完整分析（股票+大盘）
           - market-only   # 仅大盘复盘
           - stocks-only   # 仅股票分析
-      recommendation_type:
-        description: '推荐类型 (仅推荐任务有效)'
-        required: true
-        default: 'comprehensive'
-        type: choice
-        options:
-          - comprehensive  # 综合推荐
-          - breakout       # 突破推荐
-          - trend          # 趋势推荐
-          - oversold       # 超跌反弹
-          - hot            # 热点板块
       top_n:
-        description: '推荐数量 (仅推荐任务有效)'
+        description: '每板块推荐数量 (仅板块推荐有效)'
         required: true
         default: '5'
         type: choice
@@ -329,107 +317,7 @@ jobs:
             logs/
           retention-days: 30
 
-  # 任务 2: 股票推荐 (开盘前)
-  recommend:
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    # 根据定时触发或手动输入判断
-    if: |
-      github.event.schedule == '0 1 * * 1-5' ||
-      github.event.inputs.job_type == 'recommend' ||
-      (github.event_name == 'workflow_dispatch' && github.event.inputs.job_type == 'recommend')
-
-    steps:
-      - name: 随机延迟
-        run: sleep $((RANDOM % 30))
-
-      - name: 检出代码
-        uses: actions/checkout@v5
-
-      - name: 设置 Python 环境
-        uses: actions/setup-python@v6
-        with:
-          python-version: '3.11'
-          cache: 'pip'
-
-      - name: 安装依赖
-        run: |
-          pip install --upgrade pip
-          pip install -r requirements.txt
-
-      - name: 创建输出目录
-        run: mkdir -p recommendations logs
-
-      - name: 执行股票推荐
-        env:
-          # AI 配置
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
-          AIHUBMIX_KEY: ${{ secrets.AIHUBMIX_KEY }}
-
-          # 通知渠道
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          FEISHU_WEBHOOK_URL: ${{ secrets.FEISHU_WEBHOOK_URL }}
-          WECHAT_WEBHOOK_URL: ${{ secrets.WECHAT_WEBHOOK_URL }}
-          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
-          PUSHPLUS_TOKEN: ${{ secrets.PUSHPLUS_TOKEN }}
-
-        run: |
-          TYPE="${{ github.event.inputs.recommendation_type || 'comprehensive' }}"
-          TOP_N="${{ github.event.inputs.top_n || '5' }}"
-
-          echo "=========================================="
-          echo "📈 股票智能推荐系统"
-          echo "=========================================="
-          echo "⏰ 时间: $(TZ='Asia/Shanghai' date '+%Y-%m-%d %H:%M:%S')"
-          echo "🎯 推荐类型: $TYPE"
-          echo "📊 推荐数量: $TOP_N"
-          echo ""
-
-          python recommend.py \
-            --type $TYPE \
-            --top $TOP_N \
-            --scan 50 \
-            --save \
-            --output "recommendations/rec_$(date +%Y%m%d)" \
-            --llm
-
-      - name: 发送通知
-        if: github.event.inputs.notify != 'false'
-        env:
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          FEISHU_WEBHOOK_URL: ${{ secrets.FEISHU_WEBHOOK_URL }}
-          WECHAT_WEBHOOK_URL: ${{ secrets.WECHAT_WEBHOOK_URL }}
-          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
-          PUSHPLUS_TOKEN: ${{ secrets.PUSHPLUS_TOKEN }}
-        run: |
-          TYPE="${{ github.event.inputs.recommendation_type || 'comprehensive' }}"
-          TOP_N="${{ github.event.inputs.top_n || '5' }}"
-
-          python recommend.py \
-            --type $TYPE \
-            --top $TOP_N \
-            --scan 50 \
-            --notify \
-            --llm
-
-      - name: 上传推荐结果
-        if: always()
-        uses: actions/upload-artifact@v6
-        with:
-          name: recommendations-${{ github.run_id }}
-          path: recommendations/
-          retention-days: 30
-
-  # 任务 3: 板块概念推荐 (每天开盘前)
+  # 任务 2: 板块概念推荐 (每天开盘前)
   sector_recommend:
     runs-on: ubuntu-latest
     timeout-minutes: 30
