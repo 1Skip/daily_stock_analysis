@@ -97,12 +97,16 @@ class TechnicalScanner:
         for symbol in symbols:
             try:
                 result = await self._analyze_symbol(symbol, strategy)
-                if result and result.score > 60:  # 只保留合格的股票
+                if result and result.score >= 50:
                     results.append(result)
+                    self.logger.info(f"✓ {symbol} 评分:{result.score:.0f}")
+                elif result:
+                    self.logger.info(f"✗ {symbol} 评分:{result.score:.0f} (低于50)")
             except Exception as e:
                 self.logger.warning(f"分析 {symbol} 失败: {e}")
                 continue
 
+        self.logger.info(f"扫描完成: {len(results)}/{len(symbols)} 通过")
         results.sort(key=lambda x: x.score, reverse=True)
         return results
 
@@ -150,7 +154,11 @@ class TechnicalScanner:
         try:
             # 获取K线数据
             df = await self._get_kline_data(symbol, days=60)
-            if df is None or len(df) < 30:
+            if df is None:
+                self.logger.info(f"扫描 {symbol}: K线数据获取失败")
+                return None
+            if len(df) < 30:
+                self.logger.info(f"扫描 {symbol}: K线数据不足 ({len(df)}天)")
                 return None
 
             # 计算技术指标
@@ -186,11 +194,17 @@ class TechnicalScanner:
             df = ak.stock_zh_a_hist(symbol=symbol, period="daily", adjust="qfq")
             if df is not None and len(df) > 0:
                 df = df.tail(days)
-                df.columns = ['date', 'open', 'close', 'high', 'low', 'volume',
-                             'amount', 'amplitude', 'pct_change', 'change', 'turnover']
+                try:
+                    df.columns = ['date', 'open', 'close', 'high', 'low', 'volume',
+                                 'amount', 'amplitude', 'pct_change', 'change', 'turnover']
+                except Exception:
+                    pass  # 如果列名不匹配，使用原始列名
+                self.logger.debug(f"获取 {symbol} K线数据: {len(df)} 天")
                 return df
+            self.logger.debug(f"获取 {symbol} K线数据: 为空")
             return None
         except Exception as e:
+            self.logger.warning(f"获取 {symbol} K线数据失败: {e}")
             return None
 
     def _calculate_indicators(self, df: pd.DataFrame) -> pd.DataFrame:
