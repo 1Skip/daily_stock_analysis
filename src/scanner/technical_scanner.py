@@ -310,7 +310,7 @@ class TechnicalScanner:
             score += min(ma20_slope * 100, 10)
             signals['trend_up'] = True
 
-        if score <= 60:
+        if score < 50:
             return None
 
         return ScanResult(
@@ -353,7 +353,7 @@ class TechnicalScanner:
             signals['bounce_signal'] = True
             reasons.append("出现反弹信号")
 
-        if score <= 60:
+        if score < 50:
             return None
 
         return ScanResult(
@@ -385,7 +385,7 @@ class TechnicalScanner:
             signals['three_red'] = True
             reasons.append("三连阳")
 
-        if score <= 60:
+        if score < 50:
             return None
 
         return ScanResult(
@@ -421,7 +421,7 @@ class TechnicalScanner:
             score += 10
             reasons.append("放量")
 
-        if score <= 60:
+        if score < 50:
             return None
 
         return ScanResult(
