@@ -227,7 +227,7 @@ class StockRecommender:
                 score=candidate.score,
                 ai_score=analysis.get('ai_score', 50),
                 confidence=confidence,
-                reasoning=analysis.get('reasoning', candidate.reason),
+                reasoning=analysis.get('reasoning') or candidate.reason,
                 target_price=analysis.get('target_price'),
                 stop_loss=analysis.get('stop_loss'),
                 support_levels=analysis.get('support_levels', []),

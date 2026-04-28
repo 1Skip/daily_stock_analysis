@@ -296,7 +296,9 @@ def generate_sector_report(all_recommendations: Dict) -> str:
                 lines.append(f"   止损价: ¥{rec.stop_loss:.2f}")
             lines.append(f"   技术评分: {rec.score:.1f}")
             lines.append(f"   置信度: {rec.confidence}")
-            lines.append(f"   推荐理由: {rec.reasoning[:50]}...")
+            reason_text = (rec.reasoning or "")[:50]
+            if reason_text:
+                lines.append(f"   推荐理由: {reason_text}...")
 
     lines.append("\n" + "="*60)
     lines.append("⚠️ 风险提示: 以上推荐仅供参考，不构成投资建议")
