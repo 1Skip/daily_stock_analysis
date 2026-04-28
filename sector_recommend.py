@@ -397,6 +397,15 @@ async def send_sector_notification(all_recommendations: Dict, report: str, holdi
                 pl_emoji = "🔴" if total_pl < 0 else "🟢"
                 summary_lines.append(f"\n   总盈亏: {pl_emoji} {total_pl:+.2f}")
 
+        # ========== 运行摘要 ==========
+        total_recs = sum(len(recs) for recs in all_recommendations.values())
+        sector_count = len(all_recommendations)
+        summary_lines.append(f"\n{'─'*20}")
+        summary_lines.append(
+            f"📊 {sector_count}个板块 | 推荐{total_recs}只 | "
+            f"{datetime.now().strftime('%H:%M:%S')}"
+        )
+
         summary = "\n".join(summary_lines)
 
         # 使用 NotificationService 发送
