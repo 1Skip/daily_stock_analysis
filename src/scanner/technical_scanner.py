@@ -155,6 +155,8 @@ class TechnicalScanner:
                     elif change_pct < -5:
                         score -= 10
                         reasons.append(f"跌幅较大{change_pct:.2f}%")
+                    elif change_pct < -7:
+                        score -= 15  # 跌幅过大，可能有雷
 
                     # 量比（>1表示放量）
                     if volume_ratio > 1.5:
@@ -170,6 +172,32 @@ class TechnicalScanner:
                         reasons.append(f"换手率{turnover:.1f}%")
                     elif turnover > 15:
                         score -= 5  # 换手率过高可能有风险
+
+                    # 振幅（>3%说明股性活跃）
+                    amplitude = float(row.get('振幅', 0))
+                    if 3 < amplitude < 10:
+                        score += 5
+                        signals['active'] = True
+                        reasons.append(f"振幅{amplitude:.1f}%")
+
+                    # PE估值：<0亏损扣分，0-30合理加分
+                    pe = float(row.get('市盈率-动态', 0)) if pd.notna(row.get('市盈率-动态', 0)) else 0
+                    if 0 < pe < 20:
+                        score += 8
+                        reasons.append(f"PE{pe:.1f}低估")
+                    elif 0 < pe < 50:
+                        score += 3
+                    elif pe < 0:
+                        score -= 5  # 亏损股
+                        signals['loss'] = True
+
+                    # 总市值过滤（<50亿扣分）
+                    market_cap = float(row.get('总市值', 0)) if pd.notna(row.get('总市值', 0)) else 0
+                    if market_cap > 5e10:  # >500亿，大盘股稳定
+                        score += 5
+                        reasons.append(f"市值{market_cap/1e8:.0f}亿")
+                    elif market_cap < 5e9:  # <50亿，小盘股风险
+                        score -= 5
 
                     # 代码加名称用于识别
                     reason_str = '; '.join(reasons) if reasons else f"当前价¥{price:.2f}"
