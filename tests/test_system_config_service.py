@@ -857,6 +857,30 @@ class SystemConfigServiceTestCase(unittest.TestCase):
         self.assertTrue(response["success"])
         self.assertEqual(Config.get_instance().stock_list, ["300750", "TSLA"])
 
+    def test_update_with_reload_keeps_updated_env_when_optional_singleton_reset_fails(self) -> None:
+        os.environ["STOCK_LIST"] = "600519,000001"
+        reset_fetcher_module = Mock()
+
+        def _fake_import_module(name: str):
+            if name == "src.agent.tools.data_tools":
+                return reset_fetcher_module
+            if name == "src.search_service":
+                raise ImportError("search import boom")
+            raise AssertionError(f"unexpected import: {name}")
+
+        with patch("src.services.system_config_service.importlib.import_module", side_effect=_fake_import_module):
+            response = self.service.update(
+                config_version=self.manager.get_config_version(),
+                items=[{"key": "STOCK_LIST", "value": "300750,TSLA"}],
+                reload_now=True,
+            )
+
+        self.assertTrue(response["success"])
+        self.assertTrue(response["reload_triggered"])
+        self.assertIn("Failed to reset search service during config reload", response["warnings"])
+        reset_fetcher_module.reset_fetcher_manager.assert_called_once()
+        self.assertEqual(Config.get_instance().stock_list, ["300750", "TSLA"])
+
     def test_update_raises_conflict_for_stale_version(self) -> None:
         with self.assertRaises(ConfigConflictError):
             self.service.update(

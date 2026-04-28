@@ -1,4 +1,5 @@
 import hashlib
+import importlib
 import random
 import secrets
 import threading
@@ -7,13 +8,17 @@ import requests
 import json
 import uuid
 import logging
-from fake_useragent import UserAgent
 
 logger = logging.getLogger(__name__)
 
 original_request = requests.Session.request
-
-ua = UserAgent()
+_DEFAULT_USER_AGENT = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/131.0.0.0 Safari/537.36"
+)
+_ua_provider = None
+_ua_provider_lock = threading.Lock()
 
 
 class AuthCache:
@@ -39,6 +44,31 @@ class PatchSign:
 
 
 _patch_sign = PatchSign()
+
+
+def _get_random_user_agent():
+    """Return a best-effort browser User-Agent without import-time hard deps."""
+    global _ua_provider
+    if _ua_provider is None:
+        with _ua_provider_lock:
+            if _ua_provider is None:
+                try:
+                    fake_useragent = importlib.import_module("fake_useragent")
+                    _ua_provider = fake_useragent.UserAgent()
+                except Exception as exc:
+                    logger.warning(
+                        "fake_useragent unavailable, falling back to a static User-Agent: %s",
+                        exc,
+                    )
+                    _ua_provider = False
+
+    if _ua_provider:
+        try:
+            return _ua_provider.random
+        except Exception as exc:
+            logger.debug("Failed to get random fake_useragent value: %s", exc)
+
+    return _DEFAULT_USER_AGENT
 
 
 def _get_nid(user_agent):
@@ -164,7 +194,7 @@ def eastmoney_patch():
         if not is_target:
             return original_request(self, method, url, **kwargs)
         # 获取一个随机的 User-Agent
-        user_agent = ua.random
+        user_agent = _get_random_user_agent()
         # 处理 Headers：确保不破坏业务代码传入的 headers
         headers = kwargs.get("headers", {})
         headers["User-Agent"] = user_agent

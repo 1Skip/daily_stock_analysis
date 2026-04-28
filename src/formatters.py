@@ -10,8 +10,6 @@
 import re
 from typing import List
 
-import markdown2
-
 TRUNCATION_SUFFIX = "\n\n...(本段内容过长已截断)"
 PAGE_MARKER_PREFIX = f"\n\n📄"
 PAGE_MARKER_SAFE_BYTES = 16 # "\n\n📄 9999/9999"
@@ -108,6 +106,8 @@ def markdown_to_html_document(markdown_text: str) -> str:
     Returns:
         Full HTML document string with DOCTYPE, head, and body.
     """
+    import markdown2
+
     html_content = markdown2.markdown(
         markdown_text,
         extras=["tables", "fenced-code-blocks", "break-on-newline", "cuddled-lists"],

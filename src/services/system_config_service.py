@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import importlib
 import io
 import logging
 import json
@@ -88,13 +89,28 @@ class SystemConfigService:
         return build_schema_response()
 
     @staticmethod
-    def _reload_runtime_singletons() -> None:
+    def _reload_runtime_singletons() -> List[str]:
         """Reset runtime singleton services after config reload."""
-        from src.agent.tools.data_tools import reset_fetcher_manager
-        from src.search_service import reset_search_service
+        warnings: List[str] = []
+        reloaders = (
+            ("data fetcher manager", "src.agent.tools.data_tools", "reset_fetcher_manager"),
+            ("search service", "src.search_service", "reset_search_service"),
+        )
 
-        reset_fetcher_manager()
-        reset_search_service()
+        for label, module_name, resetter_name in reloaders:
+            try:
+                module = importlib.import_module(module_name)
+                getattr(module, resetter_name)()
+            except Exception as exc:
+                logger.warning(
+                    "Failed to reset %s during config reload: %s",
+                    label,
+                    exc,
+                    exc_info=True,
+                )
+                warnings.append(f"Failed to reset {label} during config reload")
+
+        return warnings
 
     @classmethod
     def _normalize_display_value(cls, key: str, value: str) -> str:
@@ -538,9 +554,9 @@ class SystemConfigService:
         reload_triggered = False
         if reload_now:
             try:
-                Config.reset_instance()
-                self._reload_runtime_singletons()
                 setup_env(override=True)
+                Config.reset_instance()
+                warnings.extend(self._reload_runtime_singletons())
                 config = Config.get_instance()
                 warnings.extend(config.validate())
                 reload_triggered = True

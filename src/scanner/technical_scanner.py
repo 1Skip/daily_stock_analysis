@@ -466,6 +466,7 @@ class TechnicalScanner:
     def _score_flow(self, symbol: str, df: pd.DataFrame) -> Optional[ScanResult]:
         """资金流向策略（简化版，需要外部数据）"""
         latest = df.iloc[-1]
+        prev = df.iloc[-2] if len(df) > 1 else latest
         score = 50
         signals = {}
         reasons = []
