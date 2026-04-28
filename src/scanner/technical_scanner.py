@@ -136,6 +136,10 @@ class TechnicalScanner:
                     if 'ST' in str(name) or '退' in str(name):
                         continue
 
+                    # 只保留主板（过滤创业板300/301、科创板688/689、北交所4/8）
+                    if not self._is_main_board(code):
+                        continue
+
                     # 基于实时数据评分
                     score = 60  # 基础分
                     signals = {}
@@ -535,6 +539,19 @@ class TechnicalScanner:
     def _pass_filters(self, result: ScanResult, min_volume: float, min_market_cap: float) -> bool:
         """过滤条件检查"""
         # 这里简化处理，实际需要根据市值和成交额数据
+        return True
+
+    @staticmethod
+    def _is_main_board(code: str) -> bool:
+        """判断是否主板股票（过滤创业板、科创板、北交所）"""
+        if not code or len(code) < 3:
+            return False
+        prefix = code[:3]
+        # 创业板: 300-301, 科创板: 688-689, 北交所: 4xx, 8xx
+        if prefix in ('300', '301', '688', '689'):
+            return False
+        if prefix[0] in ('4', '8'):
+            return False
         return True
 
     def _get_stock_name(self, symbol: str) -> str:
