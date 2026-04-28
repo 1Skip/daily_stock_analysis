@@ -64,12 +64,14 @@ async def _get_current_prices(symbols: List[str]) -> Dict[str, float]:
     """获取股票当前价格"""
     try:
         import akshare as ak
+        symbol_set = set(symbols)
         df = ak.stock_zh_a_spot_em()
         prices = {}
         for _, row in df.iterrows():
             code = str(row['代码'])
-            if code in symbols:
+            if code in symbol_set:
                 prices[code] = float(row['最新价'])
+        logger.info(f"持仓价格获取: 请求{len(symbols)}只, 匹配{len(prices)}只 {list(prices.keys())}")
         return prices
     except Exception as e:
         logger.warning(f"获取持仓价格失败: {e}")
@@ -388,21 +390,21 @@ async def send_sector_notification(all_recommendations: Dict, report: str, holdi
                 name = h['name']
                 entry = h.get('entry_price')
                 shares = h.get('shares', 0)
-                current = prices.get(code, 0)
-                if entry and current:
-                    pl = (current - entry) * shares
-                    pl_pct = (current / entry - 1) * 100
-                    total_pl += pl
-                    emoji = "🔴" if pl < 0 else "🟢"
-                    summary_lines.append(
-                        f"   {emoji} {name}({code}) ¥{current:.2f} "
-                        f"{pl:+.2f} ({pl_pct:+.2f}%)"
-                    )
-                elif current:
-                    summary_lines.append(f"   ⚪ {name}({code}) ¥{current:.2f} (成本未知)")
-            if total_pl != 0:
-                pl_emoji = "🔴" if total_pl < 0 else "🟢"
-                summary_lines.append(f"\n   总盈亏: {pl_emoji} {total_pl:+.2f}")
+                current = prices.get(code)  # None if not found
+                if current and current > 0:
+                    if entry:
+                        pl = (current - entry) * shares
+                        pl_pct = (current / entry - 1) * 100
+                        total_pl += pl
+                        emoji = "🔴" if pl < 0 else "🟢"
+                        summary_lines.append(
+                            f"   {emoji} {name}({code}) ¥{current:.2f} "
+                            f"{pl:+.2f} ({pl_pct:+.2f}%)"
+                        )
+                    else:
+                        summary_lines.append(f"   ⚪ {name}({code}) ¥{current:.2f} (成本未知)")
+                else:
+                    summary_lines.append(f"   ❓ {name}({code}) 行情获取失败")
 
         # ========== 运行摘要 ==========
         total_recs = sum(len(recs) for recs in all_recommendations.values())
