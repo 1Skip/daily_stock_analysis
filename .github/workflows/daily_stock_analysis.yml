@@ -3,8 +3,7 @@ name: 每日股票分析与推荐
 on:
   # 定时触发
   schedule:
-    - cron: '0 8 * * 1-5'     # 周一到周五，UTC 08:00 = 北京时间 16:00 (分析)
-    - cron: '0 13 * * 1-5'    # 周一到周五，UTC 13:00 = 北京时间 21:00 (板块推荐)
+    - cron: '0 9 * * 1-5'     # 周一到周五，UTC 09:00 = 北京时间 17:00
 
   # 手动触发
   workflow_dispatch:
@@ -56,9 +55,9 @@ jobs:
   analyze:
     runs-on: ubuntu-latest
     timeout-minutes: ${{ fromJSON(vars.ANALYSIS_TIMEOUT_MINUTES || '30') }}
-    # 定时触发(收盘后)或手动触发分析
+    # 定时触发或手动触发分析
     if: |
-      (github.event_name == 'schedule' && github.event.schedule == '0 8 * * 1-5') ||
+      github.event_name == 'schedule' ||
       github.event.inputs.job_type == 'analysis'
 
     steps:
@@ -321,9 +320,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     # 定时触发(开盘前)或手动触发推荐
-    # 定时触发(开盘前)或手动触发推荐
+    # 定时触发或手动触发推荐
     if: |
-      (github.event_name == 'schedule' && github.event.schedule == '0 13 * * 1-5') ||
+      github.event_name == 'schedule' ||
       github.event.inputs.job_type == 'sector_recommend'
 
     steps:
