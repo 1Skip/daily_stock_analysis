@@ -120,11 +120,20 @@ def apply_placeholder_fill(result: "AnalysisResult", missing_fields: List[str]) 
         elif field == "dashboard.battle_plan.sniper_points.stop_loss":
             if not result.dashboard:
                 result.dashboard = {}
-            if "battle_plan" not in result.dashboard:
-                result.dashboard["battle_plan"] = {}
-            if "sniper_points" not in result.dashboard["battle_plan"]:
-                result.dashboard["battle_plan"]["sniper_points"] = {}
-            result.dashboard["battle_plan"]["sniper_points"]["stop_loss"] = placeholder
+            bp = result.dashboard.setdefault("battle_plan", {})
+            sp = bp.setdefault("sniper_points", {})
+            sp.setdefault("stop_loss", placeholder)
+            sp.setdefault("ideal_buy", placeholder)
+            sp.setdefault("secondary_buy", placeholder)
+            sp.setdefault("take_profit", placeholder)
+            bp.setdefault("position_strategy", {
+                "suggested_position": placeholder,
+                "entry_plan": placeholder,
+                "risk_control": placeholder,
+            })
+            bp.setdefault("action_checklist", [
+                "{}：请结合实时行情与均线/量价信号独立判断".format(placeholder),
+            ])
 
 
 # ---------- chip_structure fallback (Issue #589) ----------
