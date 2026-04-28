@@ -48,6 +48,34 @@ def load_sectors_config() -> Dict:
         return {"sectors": {}}
 
 
+def load_holdings() -> List[Dict]:
+    """加载持仓配置"""
+    config_path = Path(__file__).parent / "holdings.json"
+    try:
+        with open(config_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+            return data.get('holdings', [])
+    except Exception as e:
+        logger.warning(f"加载持仓配置失败: {e}")
+        return []
+
+
+async def _get_current_prices(symbols: List[str]) -> Dict[str, float]:
+    """获取股票当前价格"""
+    try:
+        import akshare as ak
+        df = ak.stock_zh_a_spot_em()
+        prices = {}
+        for _, row in df.iterrows():
+            code = str(row['代码'])
+            if code in symbols:
+                prices[code] = float(row['最新价'])
+        return prices
+    except Exception as e:
+        logger.warning(f"获取持仓价格失败: {e}")
+        return {}
+
+
 def parse_arguments() -> argparse.Namespace:
     """解析命令行参数"""
     parser = argparse.ArgumentParser(
@@ -207,6 +235,9 @@ async def run_sector_recommendation(args: argparse.Namespace) -> None:
         except Exception as e:
             logger.error(f"分析 {sector_name} 失败: {e}")
 
+    # 加载持仓数据
+    holdings = load_holdings()
+
     # 生成完整报告
     if all_recommendations:
         report = generate_sector_report(all_recommendations)
@@ -218,7 +249,7 @@ async def run_sector_recommendation(args: argparse.Namespace) -> None:
 
         # 发送通知
         if args.notify:
-            await send_sector_notification(all_recommendations, report)
+            await send_sector_notification(all_recommendations, report, holdings)
     else:
         print("\n⚠️ 所有板块均未找到推荐股票")
 
@@ -319,7 +350,7 @@ async def save_report(report: str):
     logger.info(f"报告已保存: {filepath.absolute()}")
 
 
-async def send_sector_notification(all_recommendations: Dict, report: str):
+async def send_sector_notification(all_recommendations: Dict, report: str, holdings: Optional[List[Dict]] = None):
     """发送板块推荐通知"""
     try:
         # 生成简洁的通知内容
@@ -330,7 +361,6 @@ async def send_sector_notification(all_recommendations: Dict, report: str):
             for rec in recommendations[:3]:  # 每板块最多显示3只
                 emoji = "🟢" if rec.confidence == "高" else "🟡"
                 price_str = f"¥{rec.current_price:.2f}" if rec.current_price > 0 else ""
-                # 推荐理由取前80字，避免推送太长
                 reason = rec.reasoning or ""
                 if reason:
                     reason = reason[:80] + "…" if len(reason) > 80 else reason
@@ -338,6 +368,34 @@ async def send_sector_notification(all_recommendations: Dict, report: str):
                 if reason:
                     line += f"\n      💡 {reason}"
                 summary_lines.append(line)
+
+        # ========== 持仓跟踪 ==========
+        if holdings:
+            holding_codes = [h['symbol'] for h in holdings]
+            prices = await _get_current_prices(holding_codes)
+            summary_lines.append(f"\n{'─'*20}")
+            summary_lines.append(f"💰 我的持仓\n")
+            total_pl = 0.0
+            for h in holdings:
+                code = h['symbol']
+                name = h['name']
+                entry = h.get('entry_price')
+                shares = h.get('shares', 0)
+                current = prices.get(code, 0)
+                if entry and current:
+                    pl = (current - entry) * shares
+                    pl_pct = (current / entry - 1) * 100
+                    total_pl += pl
+                    emoji = "🔴" if pl < 0 else "🟢"
+                    summary_lines.append(
+                        f"   {emoji} {name}({code}) ¥{current:.2f} "
+                        f"{pl:+.2f} ({pl_pct:+.2f}%)"
+                    )
+                elif current:
+                    summary_lines.append(f"   ⚪ {name}({code}) ¥{current:.2f} (成本未知)")
+            if total_pl != 0:
+                pl_emoji = "🔴" if total_pl < 0 else "🟢"
+                summary_lines.append(f"\n   总盈亏: {pl_emoji} {total_pl:+.2f}")
 
         summary = "\n".join(summary_lines)
 
