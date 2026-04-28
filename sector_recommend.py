@@ -240,20 +240,21 @@ async def run_sector_recommendation(args: argparse.Namespace) -> None:
     # 加载持仓数据
     holdings = load_holdings()
 
-    # 生成完整报告
+    # 生成报告（即使无推荐也发送持仓通知）
     if all_recommendations:
         report = generate_sector_report(all_recommendations)
         print("\n" + report)
-
-        # 保存报告
-        if args.save:
-            await save_report(report)
-
-        # 发送通知
-        if args.notify:
-            await send_sector_notification(all_recommendations, report, holdings)
     else:
+        report = ""
         print("\n⚠️ 所有板块均未找到推荐股票")
+
+    # 保存报告
+    if args.save and report:
+        await save_report(report)
+
+    # 发送通知（无推荐时仍发送持仓信息）
+    if args.notify:
+        await send_sector_notification(all_recommendations, report, holdings)
 
 
 def init_llm_client():

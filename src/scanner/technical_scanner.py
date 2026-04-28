@@ -117,7 +117,13 @@ class TechnicalScanner:
 
             # 过滤只保留目标股票
             df = df[df['代码'].isin(symbol_set)]
-            self.logger.info(f"匹配到 {len(df)} 只目标股票")
+            self.logger.info(f"匹配到 {len(df)}/{len(symbols)} 只目标股票，请求的: {sorted(symbols)}")
+
+            pass_count = 0
+            fail_count = 0
+            skip_st = 0
+            skip_board = 0
+            skip_price = 0
 
             for _, row in df.iterrows():
                 try:
@@ -131,14 +137,17 @@ class TechnicalScanner:
                     amount = float(row.get('成交额', 0))
 
                     if pd.isna(price) or price <= 0:
+                        skip_price += 1
                         continue
 
                     # 过滤ST/退市
                     if 'ST' in str(name) or '退' in str(name):
+                        skip_st += 1
                         continue
 
                     # 只保留主板（过滤创业板300/301、科创板688/689、北交所4/8）
                     if not self._is_main_board(code):
+                        skip_board += 1
                         continue
 
                     # 基于实时数据评分
@@ -153,11 +162,12 @@ class TechnicalScanner:
                     elif 1 < change_pct:
                         score += 5
                         reasons.append(f"上涨{change_pct:+.2f}%")
+                    elif change_pct < -7:
+                        score -= 15
+                        reasons.append(f"跌幅过大{change_pct:.2f}%")
                     elif change_pct < -5:
                         score -= 10
                         reasons.append(f"跌幅较大{change_pct:.2f}%")
-                    elif change_pct < -7:
-                        score -= 15  # 跌幅过大，可能有雷
 
                     # 量比（>1表示放量）
                     if volume_ratio > 1.5:
@@ -175,29 +185,40 @@ class TechnicalScanner:
                         score -= 5  # 换手率过高可能有风险
 
                     # 振幅（>3%说明股性活跃）
-                    amplitude = float(row.get('振幅', 0))
+                    try:
+                        amplitude = float(row.get('振幅', 0))
+                    except (ValueError, TypeError):
+                        amplitude = 0
                     if 3 < amplitude < 10:
                         score += 5
                         signals['active'] = True
                         reasons.append(f"振幅{amplitude:.1f}%")
 
                     # PE估值：<0亏损扣分，0-30合理加分
-                    pe = float(row.get('市盈率-动态', 0)) if pd.notna(row.get('市盈率-动态', 0)) else 0
+                    try:
+                        pe_raw = row.get('市盈率-动态', 0)
+                        pe = float(pe_raw) if pd.notna(pe_raw) else 0
+                    except (ValueError, TypeError):
+                        pe = 0
                     if 0 < pe < 20:
                         score += 8
                         reasons.append(f"PE{pe:.1f}低估")
                     elif 0 < pe < 50:
                         score += 3
                     elif pe < 0:
-                        score -= 5  # 亏损股
+                        score -= 5
                         signals['loss'] = True
 
                     # 总市值过滤（<50亿扣分）
-                    market_cap = float(row.get('总市值', 0)) if pd.notna(row.get('总市值', 0)) else 0
-                    if market_cap > 5e10:  # >500亿，大盘股稳定
+                    try:
+                        mc_raw = row.get('总市值', 0)
+                        market_cap = float(mc_raw) if pd.notna(mc_raw) else 0
+                    except (ValueError, TypeError):
+                        market_cap = 0
+                    if market_cap > 5e10:
                         score += 5
                         reasons.append(f"市值{market_cap/1e8:.0f}亿")
-                    elif market_cap < 5e9:  # <50亿，小盘股风险
+                    elif 0 < market_cap < 5e9:
                         score -= 5
 
                     # 判断长线/短线风格
@@ -236,11 +257,13 @@ class TechnicalScanner:
                         style=style
                     )
 
-                    if score >= 50:
+                    if score >= 45:
                         results.append(result)
-                        self.logger.info(f"✓ {code} {name} 评分:{score:.0f} ¥{price:.2f}")
+                        pass_count += 1
+                        self.logger.info(f"✓ {code:6s} {name:8s} 评分:{score:3.0f} ¥{price:.2f} {reason_str}")
                     else:
-                        self.logger.info(f"✗ {code} {name} 评分:{score:.0f}")
+                        fail_count += 1
+                        self.logger.info(f"✗ {code:6s} {name:8s} 评分:{score:3.0f} ¥{price:.2f} (不达标) {reason_str}")
 
                 except Exception as e:
                     self.logger.warning(f"处理 {row.get('代码', '?')} 失败: {e}")
@@ -249,6 +272,10 @@ class TechnicalScanner:
         except Exception as e:
             self.logger.error(f"获取实时行情失败: {e}")
 
+        self.logger.info(
+            f"扫描完成: 通过{pass_count}只, 不达标{fail_count}只, "
+            f"过滤ST/退市{skip_st}只, 过滤非主板{skip_board}只, 无效价格{skip_price}只"
+        )
         return results
 
     async def _get_a_share_symbols(self) -> List[str]:
