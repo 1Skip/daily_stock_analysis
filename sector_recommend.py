@@ -358,16 +358,23 @@ async def send_sector_notification(all_recommendations: Dict, report: str, holdi
 
         for sector_name, recommendations in all_recommendations.items():
             summary_lines.append(f"\n🔸 {sector_name}")
-            for rec in recommendations[:3]:  # 每板块最多显示3只
-                emoji = "🟢" if rec.confidence == "高" else "🟡"
-                price_str = f"¥{rec.current_price:.2f}" if rec.current_price > 0 else ""
-                reason = rec.reasoning or ""
-                if reason:
-                    reason = reason[:80] + "…" if len(reason) > 80 else reason
-                line = f"   {emoji} {rec.name}({rec.symbol}) {price_str}"
-                if reason:
-                    line += f"\n      💡 {reason}"
-                summary_lines.append(line)
+            # 按长线/短线分组
+            long_recs = [r for r in recommendations if getattr(r, 'style', '') == '长线']
+            short_recs = [r for r in recommendations if getattr(r, 'style', '') == '短线']
+            for label, recs in [("📆 适合长线", long_recs[:3]), ("⚡ 适合短线", short_recs[:3])]:
+                if not recs:
+                    continue
+                summary_lines.append(f"  {label}")
+                for rec in recs:
+                    emoji = "🟢" if rec.confidence == "高" else "🟡"
+                    price_str = f"¥{rec.current_price:.2f}" if rec.current_price > 0 else ""
+                    reason = rec.reasoning or ""
+                    if reason:
+                        reason = reason[:60] + "…" if len(reason) > 60 else reason
+                    line = f"     {emoji} {rec.name}({rec.symbol}) {price_str}"
+                    if reason:
+                        line += f"  💡 {reason}"
+                    summary_lines.append(line)
 
         # ========== 持仓跟踪 ==========
         if holdings:

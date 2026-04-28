@@ -20,6 +20,7 @@ class ScanResult:
     score: float
     signals: Dict[str, Any]
     reason: str
+    style: str = ""  # 长线/短线
 
 
 class TechnicalScanner:
@@ -199,6 +200,29 @@ class TechnicalScanner:
                     elif market_cap < 5e9:  # <50亿，小盘股风险
                         score -= 5
 
+                    # 判断长线/短线风格
+                    short_score = 0
+                    long_score = 0
+                    # 短线特征：活跃量价
+                    if volume_ratio > 1.5:
+                        short_score += 3
+                    if turnover > 3:
+                        short_score += 2
+                    if amplitude > 4:
+                        short_score += 2
+                    if abs(change_pct) > 2:
+                        short_score += 1
+                    # 长线特征：低估+大盘+稳健
+                    if 0 < pe < 20:
+                        long_score += 4
+                    if market_cap > 1e10:  # >100亿
+                        long_score += 3
+                    if 0 < turnover < 5:
+                        long_score += 1
+                    if 0 < change_pct < 3:
+                        long_score += 1
+                    style = "短线" if short_score >= long_score else "长线"
+
                     # 代码加名称用于识别
                     reason_str = '; '.join(reasons) if reasons else f"当前价¥{price:.2f}"
 
@@ -208,7 +232,8 @@ class TechnicalScanner:
                         price=price,
                         score=score,
                         signals=signals,
-                        reason=reason_str
+                        reason=reason_str,
+                        style=style
                     )
 
                     if score >= 50:

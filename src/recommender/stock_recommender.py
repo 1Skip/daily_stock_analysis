@@ -40,6 +40,7 @@ class RecommendationResult:
     ai_score: float  # AI评分
     confidence: str  # 高/中/低
     reasoning: str  # 推荐理由
+    style: str = ""  # 长线/短线
     target_price: Optional[float] = None
     stop_loss: Optional[float] = None
     support_levels: List[float] = field(default_factory=list)
@@ -227,6 +228,7 @@ class StockRecommender:
                 score=candidate.score,
                 ai_score=analysis.get('ai_score', 50),
                 confidence=confidence,
+                style=candidate.style,
                 reasoning=analysis.get('reasoning') or candidate.reason,
                 target_price=analysis.get('target_price'),
                 stop_loss=analysis.get('stop_loss'),
@@ -353,6 +355,7 @@ class StockRecommender:
                 recommendation_type=rec_type,
                 score=c.score,
                 ai_score=c.score,
+                style=c.style,
                 confidence=confidence,
                 reasoning=c.reason,
                 target_price=target,
@@ -379,6 +382,7 @@ class StockRecommender:
             recommendation_type=rec_type,
             score=candidate.score,
             ai_score=50,
+            style=candidate.style,
             confidence="中",
             reasoning=candidate.reason,
             target_price=candidate.price * 1.08 if candidate.price > 0 else None,
